@@ -2,9 +2,9 @@ name:                aoc18
 version:             0.1.0.0
 github:              "githubuser/aoc18"
 license:             BSD3
-author:              "Author name here"
-maintainer:          "example@example.com"
-copyright:           "2018 Author name here"
+author:              "Robert Chrzanowski"
+maintainer:          "robert.chrzanowski@gmail.com"
+copyright:           "2018 Robert Chrzanowski"
 
 extra-source-files:
 - README.md
@@ -24,6 +24,8 @@ dependencies:
 
 library:
   source-dirs: src
+  dependencies:
+    - containers
 
 executables:
   aoc18-exe:
