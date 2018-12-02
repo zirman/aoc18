@@ -15,9 +15,9 @@ runOnFile f fname =
     IO.hClose handle
 
 toNum :: String -> [Integer]
-toNum = fmap f . words
-    where f ('+':xs) = read xs
-          f ('-':xs) = -(read xs)
+toNum = fmap f . words where
+    f ('+':xs) = read xs
+    f ('-':xs) = -(read xs)
 
 day1p1 :: IO ()
 day1p1 = runOnFile (sum . toNum) "day1.txt"
@@ -52,5 +52,5 @@ day2p2 = runOnFile day2 "day2.txt" where
         g ps (x : ts) = (ps ++ ts) : g (ps ++ [x]) ts
     subStrCmp :: Eq a => [[a]] -> [[a]] -> Bool
     subStrCmp xs ys = any (`elem` ys) xs
-    findInLists :: (Foldable t1, Foldable t2, Eq b) => t2 b -> t1 b -> [b]
+    findInLists :: Foldable t => Eq a => t a -> t a -> [a]
     findInLists xs = concatMap (\y -> Maybe.maybeToList (List.find (== y) xs))
