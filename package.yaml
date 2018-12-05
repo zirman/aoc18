@@ -26,6 +26,8 @@ library:
   source-dirs: src
   dependencies:
     - containers
+    - parsec
+    - time
 
 executables:
   aoc18-exe:

@@ -1,3 +1,4 @@
 .stack-work/
 aoc18.cabal
 *~
+.DS_Store
