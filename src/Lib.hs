@@ -2,16 +2,14 @@ module Lib where
 
 import qualified System.IO as IO
 import qualified Data.List as List
-import qualified Data.Maybe as Maybe
-import qualified Data.Char as Char
+import Data.Maybe (maybeToList)
 import Data.Set (Set)
 import qualified Data.Set as Set
-import Text.ParserCombinators.Parsec
-import Data.Functor
-import Data.Time.Calendar
-import Text.Parsec.Prim
-import Text.Parsec.Pos (SourcePos(..))
--- import Data.Semigroup
+import Text.ParserCombinators.Parsec (GenParser, many, many1, tokenPrim, eof, char, digit, string, (<|>), parse)
+import Data.Functor (($>))
+import Data.Time.Calendar (Day(..), fromGregorian)
+import Text.Parsec.Prim (ParsecT, Stream)
+import Data.Char (isDigit, toUpper)
 
 someFunc :: IO ()
 someFunc = return ()
@@ -62,7 +60,7 @@ day2p2 = runOnFile day2 "day2.txt" where
     subStrCmp :: Eq a => [[a]] -> [[a]] -> Bool
     subStrCmp xs ys = any (`elem` ys) xs
     findInLists :: Foldable t => Eq a => t a -> t a -> [a]
-    findInLists xs = concatMap (\y -> Maybe.maybeToList (List.find (== y) xs))
+    findInLists xs = concatMap (\y -> maybeToList (List.find (== y) xs))
 
 day3p1 :: IO ()
 day3p1 = runOnFile day3 "day3.txt" where
@@ -73,7 +71,7 @@ readClaim ['#':cNum, "@", offset, size] =
     let (Just i) = List.elemIndex ',' offset
     in let (Just j) = List.elemIndex 'x' size
     in let (x, ',':y) = splitAt i offset
-    in let y' = read (filter Char.isDigit y) :: Int
+    in let y' = read (filter isDigit y) :: Int
     in let x' = read x :: Int
     in let (w, 'x':h) = splitAt j size
     in let w' = read w :: Int
@@ -215,3 +213,25 @@ pShift =
 
 pShifts :: GenParser LogTok st [(Int, [(TimeStamp, TimeStamp)])]
 pShifts = many pShift
+
+day5p1 :: IO ()
+day5p1 = runOnFile (fmap (length . day5 []) . lines) "day5.txt"
+p x y = toUpper x == toUpper y && x /= y
+day5 :: String -> String -> String
+day5 ps [] = reverse ps
+day5 ps [x] = day5 (x:ps) []
+day5 ps (x:xs@(y:ys)) =
+    if p x y
+    then let (ps', ys') = removePrev ps ys in day5 ps' ys'
+    else day5 (x:ps) xs
+removePrev xs@(x:xxs) ys@(y:yys)
+    | p x y = removePrev xxs yys
+    | otherwise = (xs, ys)
+removePrev xs ys = (xs, ys)
+
+day5p2 :: IO ()
+day5p2 = runOnFile d "day5.txt" where
+    d xs =
+        let [x] = lines xs
+        in length . List.minimumBy (\a b -> compare (length a) (length b)) . fmap (\letter -> day5 [] . filter (\c -> letter /= toUpper c) $ x) $ alphabet
+    alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
