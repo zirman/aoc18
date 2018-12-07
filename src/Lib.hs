@@ -13,9 +13,12 @@ import Data.List
     , elemIndex
     , concat
     )
+
 import Data.Functor (($>))
-import Data.Maybe (maybeToList)
-import Data.Set (Set, fromList, intersection)
+import Data.Foldable (toList)
+import Data.Maybe (maybeToList, fromMaybe, isJust)
+import Data.Either (fromRight)
+import Data.Set (Set, fromList, intersection, insert, member, empty, size)
 import Data.Char (isDigit, toUpper)
 
 import Data.Time.Calendar (Day(..), fromGregorian)
@@ -160,7 +163,7 @@ rangeMinutes (start, end) = fmap (f . toJulianTime) [toJulianSecond start..toJul
     f (_, h, m) = (h, m)
 
 toJulianSecond :: TimeStamp -> Integer
-toJulianSecond TimeStamp { day=d, hour=h, minute=m } =
+toJulianSecond TimeStamp { day = d, hour = h, minute = m } =
     (24 * 60 * toModifiedJulianDay d) + 60 * fromIntegral h + fromIntegral m
 
 toJulianTime :: Integer -> (Day, Int, Int)
@@ -281,3 +284,85 @@ day5p2 = runOnFile d "day5.txt"
     d xs = let x = head . lines $ xs
            in length . minimumBy (\a b -> compare (length a) (length b)) . fmap (\letter -> day5 [] . filter (\c -> letter /= toUpper c) $ x) $ alphabet
     alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+day6p1 :: IO ()
+day6p1 = runOnFile (part1 . parseDay6) "day6.txt"
+  where
+    part1 points = length . maximumBy (\a b -> compare (length a) (length b)) .
+                   filter (not . null) . fmap (\(Just x) -> toList x) .
+                   filter isJust . fmap (getArea points (getEdge points)) $
+                   points
+
+parseDay6 :: String -> [Tile]
+parseDay6 = fromRight [] . parse pTileFile "Parsing Tile File"
+
+data Tile = Tile Int Int deriving (Eq, Ord, Show)
+data Edge = Edge Int Int Int Int deriving Show
+
+pTileFile :: GenParser Char st [Tile]
+pTileFile = many pTile
+
+pTile :: GenParser Char st Tile
+pTile = many1 digit >>= \x -> string ", " *> many1 digit >>= \y -> char '\n' $>
+        Tile (read x) (read y)
+
+getEdge :: [Tile] -> Edge
+getEdge ts = Edge (minimum xs) (minimum ys) (maximum xs) (maximum ys)
+  where
+    xs = fmap (\(Tile x _) -> x) ts
+    ys = fmap (\(Tile _ y) -> y) ts
+
+isInside :: Edge -> Tile -> Bool
+isInside (Edge minX minY maxX maxY)
+         (Tile x y) = x > minX && x < maxX && y > minY && y < maxY
+
+getDistance :: Tile -> Tile -> Int
+getDistance (Tile x1 y1) (Tile x2 y2) = abs (x1 - x2) + abs (y1 - y2)
+
+getNearestOne :: [Tile] -> Tile -> Maybe Tile
+getNearestOne points tile = onlyOneNearest
+  where
+    distances = fmap (`getDistance` tile) points
+    minimumDistance = minimum distances
+    nearestPoints = fmap fst . filter eqMinimumDistance $ zip points distances
+    eqMinimumDistance (_, distance) = distance == minimumDistance
+    onlyOneNearest = if null . tail $ nearestPoints
+                     then Just (head nearestPoints)
+                     else Nothing
+
+getArea :: [Tile] -> Edge -> Tile -> Maybe (Set Tile)
+getArea points edge origin = search origin empty
+  where
+    search tile@(Tile x y) visitedTiles
+        | member tile visitedTiles = Just visitedTiles -- checked here
+        | Just origin == getNearestOne points tile =
+            if isInside edge tile -- origin nearest
+            then search (Tile (x - 1) y) (insert tile visitedTiles) >>=
+                 search (Tile (x + 1) y) >>=
+                 search (Tile x (y - 1)) >>=
+                 search (Tile x (y + 1))
+            else Nothing -- it's infinite
+        | otherwise = Just visitedTiles
+
+day6p2 :: IO ()
+day6p2 = runOnFile (part1 . parseDay6) "day6.txt"
+  where
+    part1 points = fmap size . find (not . null) .
+                   fmap (getNearestArea points) $
+                   points
+
+getDistanceTotal :: [Tile] -> Tile -> Int
+getDistanceTotal points tile = sum . fmap (`getDistance` tile) $ points
+
+getNearestArea :: [Tile] -> Tile -> Set Tile
+getNearestArea points origin = search origin empty
+  where
+    search tile@(Tile x y) visitedTiles
+        | member tile visitedTiles = visitedTiles -- was here before
+        | getDistanceTotal points tile <= 10000 =
+            search (Tile (x - 1) y) .
+            search (Tile (x + 1) y) .
+            search (Tile x (y - 1)) .
+            search (Tile x (y + 1)) $
+            insert tile visitedTiles
+        | otherwise = visitedTiles
