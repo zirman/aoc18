@@ -1,6 +1,7 @@
 module Lib where
 
 import System.IO (openFile, hGetContents, hClose, IOMode(..))
+
 import Data.List
     ( find
     , group
@@ -13,15 +14,15 @@ import Data.List
     , elemIndex
     , concat
     )
-
 import Data.Functor (($>))
 import Data.Foldable (toList)
 import Data.Maybe (maybeToList, fromMaybe, isJust)
 import Data.Either (fromRight)
 import Data.Set (Set, fromList, intersection, insert, member, empty, size)
 import Data.Char (isDigit, toUpper)
-
 import Data.Time.Calendar (Day(..), fromGregorian)
+
+import Control.Monad ((>=>))
 
 import Text.Parsec.Prim (ParsecT, Stream)
 import Text.ParserCombinators.Parsec
@@ -337,10 +338,11 @@ getArea points edge origin = search origin empty
         | member tile visitedTiles = Just visitedTiles -- checked here
         | Just origin == getNearestOne points tile =
             if isInside edge tile -- origin nearest
-            then search (Tile (x - 1) y) (insert tile visitedTiles) >>=
-                 search (Tile (x + 1) y) >>=
-                 search (Tile x (y - 1)) >>=
-                 search (Tile x (y + 1))
+            then search (Tile (x - 1) y) >=>
+                 search (Tile (x + 1) y) >=>
+                 search (Tile x (y - 1)) >=>
+                 search (Tile x (y + 1)) $
+                 insert tile visitedTiles
             else Nothing -- it's infinite
         | otherwise = Just visitedTiles
 
