@@ -8,26 +8,35 @@ import Data.List
     , groupBy
     , sort
     , sortBy
+    , sortOn
     , minimumBy
     , maximumBy
     , filter
     , elemIndex
     , concat
+    , (\\)
+    , nub
+    , delete
+    , union
+    , partition
+    , deleteFirstsBy
     )
 import Data.Functor (($>))
 import Data.Foldable (toList)
-import Data.Maybe (maybeToList, fromMaybe, isJust)
+import Data.Maybe (maybeToList, fromMaybe, isJust, fromJust, maybe)
 import Data.Either (fromRight)
 import Data.Set (Set, fromList, intersection, insert, member, empty, size)
-import Data.Char (isDigit, toUpper)
+import Data.Char (isDigit, toUpper, ord)
 import Data.Time.Calendar (Day(..), fromGregorian)
 
-import Control.Monad ((>=>))
+import Control.Monad ((<=<))
+import Control.Applicative((<$>))
 
 import Text.Parsec.Prim (ParsecT, Stream)
 import Text.ParserCombinators.Parsec
     ( GenParser
     , many
+    , oneOf
     , many1
     , tokenPrim
     , eof
@@ -36,10 +45,12 @@ import Text.ParserCombinators.Parsec
     , string
     , (<|>)
     , parse
+    , spaces
+    , count
     )
 
 someFunc :: IO ()
-someFunc = return ()
+someFunc = day6p1 -- return ()
 
 runOnFile :: Show a => (String -> a) -> String -> IO ()
 runOnFile f fname =
@@ -150,7 +161,9 @@ day4p2 = runOnFile f "day4.txt"
     sortByGuard (Right xs) = sortBy (\a b -> compare (fst a) (fst b)) xs
     groupByGuard = groupBy (\a b -> fst a == fst b)
     mergeNaps = fmap (\xs -> (fst (head xs), concatMap rangeMinutes . concatMap snd $ xs))
-    mergeGuard = maximumBy (\(_, (b, _)) (_, (e, _)) -> compare b e) . fmap (\(guard, naps) -> (guard, foo . maximumBy (\a b -> compare (length a) (length b)) . group . sort $ naps)) . filter (\(_, naps) -> not (null naps))
+    mergeGuard = maximumBy (\(_, (b, _)) (_, (e, _)) -> compare b e) .
+                 fmap (\(guard, naps) -> (guard, foo . maximumBy (\a b -> compare (length a) (length b)) . group . sort $ naps)) .
+                 filter (\(_, naps) -> not (null naps))
     calcNum (guard, (count, (hour, minute))) = guard * minute
 
 foo xs = (length xs, head xs)
@@ -283,7 +296,9 @@ day5p2 :: IO ()
 day5p2 = runOnFile d "day5.txt"
   where
     d xs = let x = head . lines $ xs
-           in length . minimumBy (\a b -> compare (length a) (length b)) . fmap (\letter -> day5 [] . filter (\c -> letter /= toUpper c) $ x) $ alphabet
+           in length . minimumBy (\a b -> compare (length a) (length b)) .
+              fmap (\letter -> day5 [] . filter (\c -> letter /= toUpper c) $ x) $
+              alphabet
     alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 day6p1 :: IO ()
@@ -335,21 +350,21 @@ getArea :: [Tile] -> Edge -> Tile -> Maybe (Set Tile)
 getArea points edge origin = search origin empty
   where
     search tile@(Tile x y) visitedTiles
-        | member tile visitedTiles = Just visitedTiles -- checked here
+        | member tile visitedTiles = Just visitedTiles -- was here already
         | Just origin == getNearestOne points tile =
-            if isInside edge tile -- origin nearest
-            then search (Tile (x - 1) y) >=>
-                 search (Tile (x + 1) y) >=>
-                 search (Tile x (y - 1)) >=>
+            if isInside edge tile                      -- origin is nearest
+            then search (Tile (x - 1) y) <=<
+                 search (Tile (x + 1) y) <=<
+                 search (Tile x (y - 1)) <=<
                  search (Tile x (y + 1)) $
                  insert tile visitedTiles
-            else Nothing -- it's infinite
+            else Nothing                               -- it's infinite
         | otherwise = Just visitedTiles
 
 day6p2 :: IO ()
-day6p2 = runOnFile (part1 . parseDay6) "day6.txt"
+day6p2 = runOnFile (part2 . parseDay6) "day6.txt"
   where
-    part1 points = fmap size . find (not . null) .
+    part2 points = fmap size . find (not . null) .
                    fmap (getNearestArea points) $
                    points
 
@@ -368,3 +383,96 @@ getNearestArea points origin = search origin empty
             search (Tile x (y + 1)) $
             insert tile visitedTiles
         | otherwise = visitedTiles
+
+day7p1 :: IO ()
+day7p1 = runOnFile (part1 . parseDay7) "day7.txt"
+  where
+    part1 deps = sNode :
+        search [sNode] (fmap (\to -> ("",to)) (delete sNode sFrom) ++ sTo)
+      where
+        sFrom = (sort . nub . fmap fst $ deps) \\ (sort . nub . fmap snd $ deps)
+        sTo = fmap (\xs -> (sort . fmap fst $ xs, snd . head $ xs)) .
+              groupBy (\(_, a) (_, b) -> a == b) . sortOn snd $ deps
+        sNode = minimum sFrom
+        search _ [] = []
+        search from to = snd next : search (snd next : from) (delete next to)
+          where
+            next = head . sortOn snd . filter (\(f, _) -> all (`elem` from) f) $
+                   to
+
+type Dep = (Char, Char)
+
+parseDay7 :: String -> [Dep]
+parseDay7 = fromRight [] . parse pDepFile "Parsing Dependency File"
+
+pDepFile :: GenParser Char st [Dep]
+pDepFile = many pDep
+
+pNode :: GenParser Char st Char
+pNode = oneOf "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+pDep :: GenParser Char st Dep
+pDep = string "Step " *> pNode >>= \a ->
+       string " must be finished before step "  *> pNode >>= \b ->
+       string " can begin.\n" $> (a, b)
+
+day7p2 :: IO ()
+day7p2 = runOnFile (part2 . parseDay7) "day7.txt"
+  where
+    part2 deps = search 0 [] 5 [] (fmap (\to -> ("",to)) sFrom ++ sTo)
+      where
+        sFrom = (sort . nub . fmap fst $ deps) \\ (sort . nub . fmap snd $ deps)
+        sTo = fmap (\xs -> (sort . fmap fst $ xs, snd . head $ xs)) .
+              groupBy (\(_, a) (_, b) -> a == b) . sortOn snd $ deps
+        search :: Int -> String -> Int -> [(Int, Char)] -> [(String, Char)] -> Int
+        search n _ _ [] [] = n - 1
+        search n from idling working to =
+            search (n + 1) from' idling' working' to'
+          where
+            doneAndWorking :: ([(Int, Char)], [(Int, Char)])
+            doneAndWorking = partition (\(i, c) -> i == 0) . fmap (\(i, c) -> (i - 1, c)) $ working
+            from' :: String
+            from' = fmap snd (fst doneAndWorking) ++ from
+            availableWorkers :: Int
+            availableWorkers = length (fst doneAndWorking) + idling
+            availableNodes :: [(String, Char)]
+            availableNodes = sortOn snd . filter (\(f, _) -> all (`elem` from') f) $ to
+            idling' :: Int
+            idling' = availableWorkers - min availableWorkers (length availableNodes)
+            readyTo :: [(String, Char)]
+            readyTo = take availableWorkers availableNodes
+            working' :: [(Int, Char)]
+            working' = fmap (\(_, node) -> (time node, node)) readyTo ++ snd doneAndWorking
+            to' :: [(String, Char)]
+            to' = deleteFirstsBy (==) to readyTo
+            time :: Char -> Int
+            time c = ord c - ord 'A' + 61
+
+day8p1 :: IO ()
+day8p1 = runOnFile (part1 . pDay8) "day8.txt"
+  where
+    part1 (Right tree) = metaSum tree
+    metaSum (Tree children meta) = sum meta + sum (fmap metaSum children)
+
+data Tree = Tree [Tree] [Int] deriving Show
+
+pDay8 = parse pTree "Failed Parsing"
+
+pNum :: GenParser Char st Int
+pNum = read <$> many1 digit <* spaces
+
+pTree :: GenParser Char st Tree
+pTree = pNum >>= \nChildren ->
+        pNum >>= \nMeta ->
+        count nChildren pTree >>= \children ->
+        count nMeta pNum >>= \meta ->
+        return (Tree children meta)
+
+day8p2 :: IO ()
+day8p2 = runOnFile (part2 . pDay8) "day8.txt"
+  where
+    part2 (Right tree) = metaSum tree
+    metaSum (Tree [] meta) = sum meta
+    metaSum (Tree children meta) =
+        sum . concatMap (fmap metaSum . get children) $ meta
+    get xs n = take 1 . drop (n - 1) $ xs
