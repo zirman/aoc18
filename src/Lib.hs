@@ -20,7 +20,10 @@ import Data.List
     , union
     , partition
     , deleteFirstsBy
+    , foldl'
     )
+import Data.Map.Strict (Map)
+import qualified Data.Map as Map
 import Data.Functor (($>))
 import Data.Foldable (toList)
 import Data.Maybe (maybeToList, fromMaybe, isJust, fromJust, maybe)
@@ -50,7 +53,7 @@ import Text.ParserCombinators.Parsec
     )
 
 someFunc :: IO ()
-someFunc = day6p1 -- return ()
+someFunc = print day9p2
 
 runOnFile :: Show a => (String -> a) -> String -> IO ()
 runOnFile f fname =
@@ -58,6 +61,8 @@ runOnFile f fname =
     hGetContents handle >>= \contents ->
     print (f contents) *>
     hClose handle
+
+-- > Day 1
 
 toNum :: String -> [Integer]
 toNum = fmap f . words
@@ -76,6 +81,8 @@ day1p2 = runOnFile day1 "day1.txt"
         let freqs = drop 1 $ scanl (+) 0 xs
         in zip freqs $ scanl (flip (:)) [] freqs
     seenFreq (freq, seen) = freq `elem` seen
+
+-- > Day 2
 
 day2p1 :: IO ()
 day2p1 = runOnFile day2 "day2.txt"
@@ -104,6 +111,8 @@ day2p2 = runOnFile day2 "day2.txt"
     subStrCmp xs ys = any (`elem` ys) xs
     findInLists :: Foldable t => Eq a => t a -> t a -> [a]
     findInLists xs = concatMap (\y -> maybeToList (find (== y) xs))
+
+-- > Day 3
 
 day3p1 :: IO ()
 day3p1 = runOnFile day3 "day3.txt"
@@ -134,6 +143,8 @@ day3p2 = runOnFile (head . day3 . claims) "day3.txt"
         overlaping :: Set (Int, Int)
         overlaping = fromList . concat . filter (\xs -> length xs > 1) . group .
             sort . concatMap snd $ xs
+
+-- > Day 4
 
 day4p1 :: IO ()
 day4p1 = runOnFile day4 "day4.txt"
@@ -277,6 +288,8 @@ pShift =
 pShifts :: GenParser LogTok st [(Int, [(TimeStamp, TimeStamp)])]
 pShifts = many pShift
 
+-- > Day 5
+
 day5p1 :: IO ()
 day5p1 = runOnFile (head . fmap (length . day5 []) . lines) "day5.txt"
 p x y = toUpper x == toUpper y && x /= y
@@ -300,6 +313,8 @@ day5p2 = runOnFile d "day5.txt"
               fmap (\letter -> day5 [] . filter (\c -> letter /= toUpper c) $ x) $
               alphabet
     alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+-- > Day 6
 
 day6p1 :: IO ()
 day6p1 = runOnFile (part1 . parseDay6) "day6.txt"
@@ -384,6 +399,8 @@ getNearestArea points origin = search origin empty
             insert tile visitedTiles
         | otherwise = visitedTiles
 
+-- > Day 7
+
 day7p1 :: IO ()
 day7p1 = runOnFile (part1 . parseDay7) "day7.txt"
   where
@@ -448,10 +465,11 @@ day7p2 = runOnFile (part2 . parseDay7) "day7.txt"
             time :: Char -> Int
             time c = ord c - ord 'A' + 61
 
+-- > Day 8
+
 day8p1 :: IO ()
-day8p1 = runOnFile (part1 . pDay8) "day8.txt"
+day8p1 = runOnFile (metaSum . alwaysRight . pDay8) "day8.txt"
   where
-    part1 (Right tree) = metaSum tree
     metaSum (Tree children meta) = sum meta + sum (fmap metaSum children)
 
 data Tree = Tree [Tree] [Int] deriving Show
@@ -469,10 +487,106 @@ pTree = pNum >>= \nChildren ->
         return (Tree children meta)
 
 day8p2 :: IO ()
-day8p2 = runOnFile (part2 . pDay8) "day8.txt"
+day8p2 = runOnFile (metaSum . alwaysRight . pDay8) "day8.txt"
   where
-    part2 (Right tree) = metaSum tree
     metaSum (Tree [] meta) = sum meta
     metaSum (Tree children meta) =
         sum . concatMap (fmap metaSum . get children) $ meta
     get xs n = take 1 . drop (n - 1) $ xs
+
+alwaysRight :: Either a b -> b
+alwaysRight (Right b) = b
+
+-- > Day 9
+
+day9p1 = maximum . Map.elems . scores . fromJust .
+         find (\game -> nextMarble game >= 71790) $
+         scanl (\game _ -> takeTurn game) (newGame 459) [1..]
+
+day9p2 = maximum . Map.elems . scores . fromJust .
+         find (\game -> nextMarble game >= 7179000) $
+         scanl (\game _ -> takeTurn game) (newGame 459) [1..]
+
+type Position = Int
+type Player = Int
+type NumPlayers = Int
+type Marble = Int
+type UntilMarble = Int
+type Score = Int
+type Scores = Map Player Score
+data Board = Board [Marble] Marble [Marble] deriving Show
+data Game = Game
+    { numPlayers :: NumPlayers
+    , nextPlayer :: Player
+    , nextMarble :: Marble
+    , board :: Board
+    , scores :: Scores
+    } deriving Show
+
+newGame :: NumPlayers -> Game
+newGame numPlayers
+    = Game { numPlayers = numPlayers
+           , nextPlayer = 0
+           , nextMarble = 1
+           , board = Board [] 0 []
+           , scores = score'
+           }
+  where
+    score' = Map.fromList [(player, 0) | player <- [0 .. numPlayers - 1]]
+
+takeTurn :: Game -> Game
+takeTurn game
+    | mod (nextMarble game) 23 == 0
+        = game { nextPlayer = nextPlayer'
+               , nextMarble = nextMarble'
+               , board = removeCurrent slideLeft
+               , scores = scores'
+               }
+    | otherwise
+        = game { nextPlayer = nextPlayer'
+               , nextMarble = nextMarble'
+               , board = insertRight (nextMarble game) . moveRight . board $
+                         game
+               }
+  where
+    nextPlayer' = mod (nextPlayer game + 1) (numPlayers game)
+    nextMarble' = nextMarble game + 1
+    scores' = Map.adjust
+                  (+ (nextMarble game + getCurrentMarble slideLeft))
+                  (nextPlayer game)
+                  (scores game)
+    slideLeft = moveLeft . moveLeft . moveLeft . moveLeft . moveLeft .
+                moveLeft . moveLeft . board $ game
+
+getCurrentMarble :: Board -> Marble
+getCurrentMarble (Board _ marble _) = marble
+
+moveRight :: Board -> Board
+moveRight board@(Board [] _ []) = board
+moveRight (Board left marble [])
+    = Board [] (head right) (drop 1 right)
+  where
+    right = foldl' (flip (:)) [marble] left
+moveRight (Board left leftHead (marble:right))
+    = Board (leftHead:left) marble right
+
+moveLeft :: Board -> Board
+moveLeft board@(Board [] _ []) = board
+moveLeft (Board [] marble right)
+    = Board (drop 1 left) (head left) []
+  where
+    left = foldl' (flip (:)) [marble] right
+moveLeft (Board (marble:left) rightHead right)
+    = Board left marble (rightHead:right)
+
+insertRight :: Marble -> Board -> Board
+insertRight marble (Board left leftHead right)
+    = Board (leftHead:left) marble right
+
+removeCurrent :: Board -> Board
+removeCurrent (Board left _ [])
+    = Board [] (head right) (drop 1 right)
+  where
+    right = reverse left
+removeCurrent (Board left _ (headRight:right))
+    = Board left headRight right
