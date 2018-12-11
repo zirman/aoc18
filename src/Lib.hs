@@ -21,6 +21,8 @@ import Data.List
     , partition
     , deleteFirstsBy
     , foldl'
+    , unfoldr
+    , intercalate
     )
 import Data.Map.Strict (Map)
 import qualified Data.Map as Map
@@ -50,6 +52,7 @@ import Text.ParserCombinators.Parsec
     , parse
     , spaces
     , count
+    , option
     )
 
 someFunc :: IO ()
@@ -59,7 +62,14 @@ runOnFile :: Show a => (String -> a) -> String -> IO ()
 runOnFile f fname =
     openFile fname ReadMode >>= \handle ->
     hGetContents handle >>= \contents ->
-    print (f contents) *>
+    putStrLn (show (f contents)) *>
+    hClose handle
+
+runOnFile2 :: (String -> String) -> String -> IO ()
+runOnFile2 f fname =
+    openFile fname ReadMode >>= \handle ->
+    hGetContents handle >>= \contents ->
+    putStrLn (f contents) *>
     hClose handle
 
 -- > Day 1
@@ -590,3 +600,82 @@ removeCurrent (Board left _ [])
     right = reverse left
 removeCurrent (Board left _ (headRight:right))
     = Board left headRight right
+
+-- Day 10
+
+day10p1 :: IO () -- intercalate "\n\n\n" . fmap graphPV . reverse . part1
+day10p1 = runOnFile2 (graphPV . last . part1 . alwaysRight . pDay10) "day10.txt"
+  where
+    part1 = unfoldr f
+    f :: [PV] -> Maybe ([PV], [PV])
+    f pvs
+        | a < a' = Nothing
+        | otherwise = Just (pvs', pvs')
+      where
+        pvs' = fmap nextPV pvs
+        a = area pvs
+        a' = area pvs'
+
+day10p2 :: IO ()
+day10p2 = runOnFile2 (show . length . part2 . alwaysRight . pDay10) "day10.txt"
+    where
+    part2 = unfoldr f
+    f :: [PV] -> Maybe ([PV], [PV])
+    f pvs
+        | a < a' = Nothing
+        | otherwise = Just (pvs', pvs')
+        where
+        pvs' = fmap nextPV pvs
+        a = area pvs
+        a' = area pvs'
+
+minx :: [PV] -> Int
+minx = minimum . fmap (\(PV x _ _ _) -> x)
+maxx :: [PV] -> Int
+maxx = maximum . fmap (\(PV x _ _ _) -> x)
+miny :: [PV] -> Int
+miny = minimum . fmap (\(PV _ y _ _) -> y)
+maxy :: [PV] -> Int
+maxy = maximum . fmap (\(PV _ y _ _) -> y)
+width :: [PV] -> Int
+width pvs = maxx pvs - minx pvs
+height :: [PV] -> Int
+height pvs = maxy pvs - miny pvs
+area :: [PV] -> Integer
+area pvs = fromIntegral (height pvs) * fromIntegral (width pvs)
+
+pDay10 = parse pDay10File "Parsing Vector File"
+
+nextPV :: PV -> PV
+nextPV (PV x y dX dY) = PV (x + dX) (y + dY) dX dY
+
+graphHor :: Int -> [PV] -> String
+graphHor y pvs =
+    reverse . snd . foldl' f (minx pvs - 1, "") . nub . fmap (\(PV x _ _ _) -> x) .
+    sortOn (\(PV x _ _ _) -> x) . filter (\(PV _ y' _ _) -> y == y') $
+    pvs
+  where
+    f (x, cs) x' = (x', '#' : replicate (x' - x - 1) '.' ++ cs)
+
+graphPV :: [PV] -> String
+graphPV pvs = intercalate "\n" . fmap (`graphHor` pvs) $ [miny pvs..maxy pvs]
+
+type Vec = (Int, Int)
+data PV = PV Int Int Int Int deriving Show
+
+pDay10File :: GenParser Char st [PV]
+pDay10File = many pPV
+
+pSInt :: GenParser Char st Int
+pSInt = option 1 (char '-' $> (-1)) >>= \s ->
+        many1 digit >>= \ds ->
+        return (s * read ds)
+
+pVec = char '<' *> spaces *> pSInt >>= \x ->
+       char ',' *> spaces *> pSInt >>= \y ->
+       char '>' $> (x, y)
+
+pPV :: GenParser Char st PV
+pPV = string "position=" *> pVec >>= \(px, py) ->
+      string " velocity=" *> pVec >>= \(vx, vy) ->
+      char '\n' $> PV px py vx vy
