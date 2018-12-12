@@ -56,7 +56,7 @@ import Text.ParserCombinators.Parsec
     )
 
 someFunc :: IO ()
-someFunc = print day9p2
+someFunc = day11p2
 
 runOnFile :: Show a => (String -> a) -> String -> IO ()
 runOnFile f fname =
@@ -679,3 +679,29 @@ pPV :: GenParser Char st PV
 pPV = string "position=" *> pVec >>= \(px, py) ->
       string " velocity=" *> pVec >>= \(vx, vy) ->
       char '\n' $> PV px py vx vy
+
+-- Day 11
+
+day11p1 :: IO ()
+day11p1 = print part1
+  where
+    part1 = fmap snd . maximumBy (\(a,_) (b,_) -> compare a b) . fmap (\x -> (sqrLvl x, x)) $ [(x, y) | x <- [1..300 - 2], y <- [1..300 - 2]]
+    sqrLvl (oX, oY) = sum $ powLvl <$> [(x, y) | x <- [oX..oX + 2], y <- [oY..oY + 2]]
+
+serNo = 7803
+
+powLvl (x, y) = mod (div (p - mod p 100) 100) 10 - 5
+  where
+    rackId = x + 10
+    p = (rackId * y + serNo) * rackId
+
+day11p2 :: IO ()
+day11p2 = print part2
+  where
+    part2 = maximumBy (\(a,_) (b,_) -> compare a b) $ (\a -> (sqrLvl a, a)) <$> [(x, y, s) | s <- [1..300], x <- [1..300 - s + 1], y <- [1..300 - s + 1]]
+    sqrLvl (oX, oY, s) = sum $ powLvl <$> [(x, y) | x <- [oX..oX + (s - 1)], y <- [oY..oY + (s - 1)]]
+
+-- cacheFun :: Ord k => (k -> a) -> [k] -> (k -> a) -- Map k a
+-- cacheFun f ks = \k -> fromJust (Map.lookup k km)
+--   where
+--     km = Map.fromList $ (\k -> (k, f k)) <$> ks
